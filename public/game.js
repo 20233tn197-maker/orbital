@@ -170,7 +170,7 @@ export class SpaceGame {
   }
 
   makeBullets() {
-    this.bulletMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.1, 0.1, 2.8), new THREE.MeshBasicMaterial({ color: '#ffffff', toneMapped: false }), 750);
+    this.bulletMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.1, 0.1, 2.8), new THREE.MeshBasicMaterial({ color: '#ffffff', toneMapped: false }), 350);
     this.bulletMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); this.bulletMesh.count = 0; this.bulletMesh.frustumCulled = false; this.scene.add(this.bulletMesh);
     this.muzzleLight = new THREE.PointLight('#ffd0a0', 0, 16); this.scene.add(this.muzzleLight);
     this.machineColor = new THREE.Color('#8fffff'); this.cannonColor = new THREE.Color('#ffac68');
@@ -356,8 +356,8 @@ export class SpaceGame {
       const t = this.snapshot.time + age;
       o.mesh.rotation.set(o.state.seed + t * 0.025, o.state.seed * 0.3 + t * 0.018, t * 0.01);
     }
-    this.bulletMesh.count = Math.min(this.snapshot.bullets.length, 750);
-    this.snapshot.bullets.slice(0, 750).forEach((b, i) => {
+    this.bulletMesh.count = Math.min(this.snapshot.bullets.length, 350);
+    this.snapshot.bullets.slice(0, 350).forEach((b, i) => {
       dummy.position.fromArray(b.p).addScaledVector(v.fromArray(b.v), age);
       dummy.quaternion.setFromUnitVectors(Z, v.normalize()); dummy.scale.setScalar(b.kind === 'cannon' ? 1.4 : 1);
       dummy.updateMatrix(); this.bulletMesh.setMatrixAt(i, dummy.matrix); this.bulletMesh.setColorAt(i, b.kind === 'cannon' ? this.cannonColor : this.machineColor);

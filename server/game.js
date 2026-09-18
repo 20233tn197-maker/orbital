@@ -7,6 +7,14 @@ const point = (radius = 220) => new Vector3().randomDirection().multiplyScalar(M
 const round = n => Math.round(n * 100) / 100;
 const vec = v => v.toArray().map(round);
 
+const _delta = new Vector3();
+const _normal = new Vector3();
+const _lead = new Vector3();
+const _look = new Matrix4();
+const _up = new Vector3(0, 1, 0);
+const _end = new Vector3();
+const _shotDir = new Vector3();
+
 export class Room {
   constructor(code, solo = false) {
     this.code = code;
@@ -58,7 +66,7 @@ export class Room {
     for (const [id, p] of this.players) if (p.bot) this.players.delete(id);
     const botsToAdd = Math.min(this.botCount, 8 - this.players.size);
     for (let i = 0; i < botsToAdd; i++) this.addPlayer(['VÉRTICE', 'NOVA', 'ECHO', 'SPECTRE', 'ORION', 'PULSAR'][i], true);
-    this.asteroids = Array.from({ length: 48 }, (_, i) => this.rock(i < 10 ? random(10, 15) : i < 26 ? random(5, 8) : random(2.5, 4)));
+    this.asteroids = Array.from({ length: 32 }, (_, i) => this.rock(i < 8 ? random(10, 15) : i < 20 ? random(5, 8) : random(2.5, 4)));
     this.bullets = [];
     this.events = [];
     this.phase = 'playing';
@@ -75,25 +83,28 @@ export class Room {
     let target = null, nearest = Infinity;
     for (const other of this.players.values()) {
       if (other.id === p.id || !other.alive || !other.connected) continue;
-      const distance = other.p.distanceTo(p.p);
+      const dx = other.p.x - p.p.x, dy = other.p.y - p.p.y, dz = other.p.z - p.p.z;
+      const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
       if (distance < nearest) { nearest = distance; target = other; }
     }
     if (!target) return emptyInput();
-    const lead = target.p.clone().addScaledVector(target.v, Math.min(0.6, nearest / 190));
-    const look = new Quaternion().setFromRotationMatrix(new Matrix4().lookAt(p.p, lead, new Vector3(0, 1, 0)));
-    const q = p.q.clone().rotateTowards(look, dt * 1.45);
-    const aimed = p.q.angleTo(look) < 0.14;
+    _lead.copy(target.p).addScaledVector(target.v, Math.min(0.6, nearest / 190));
+    _look.lookAt(p.p, _lead, _up);
+    const q = p.q.clone().rotateTowards(new Quaternion().setFromRotationMatrix(_look), dt * 1.45);
+    const aimed = p.q.angleTo(new Quaternion().setFromRotationMatrix(_look)) < 0.14;
     return { q: q.toArray(), z: nearest > 55 ? 1 : nearest < 28 ? -0.6 : 0.2, x: Math.sin(this.time * 0.6 + p.color.length) * 0.6, y: Math.sin(this.time * 0.45) * 0.2, boost: nearest > 140, fire: aimed && nearest < 240, cannon: aimed && nearest < 60 };
   }
 
   shoot(p, kind) {
     const w = WEAPONS[kind];
-    if (p[kind] > 0 || this.bullets.length > 650) return;
+    if (p[kind] > 0 || this.bullets.length > 400) return;
     p[kind] = w.interval;
     p.shield = 0;
     for (let i = 0; i < w.pellets; i++) {
-      const dir = new Vector3(random(-w.spread, w.spread), random(-w.spread, w.spread), -1).normalize().applyQuaternion(p.q);
-      this.bullets.push({ id: ++this.serial, owner: p.id, kind, p: p.p.clone().addScaledVector(dir, 3.6), v: dir.multiplyScalar(w.speed).addScaledVector(p.v, 0.35), life: w.life, damage: w.damage });
+      const spreadX = random(-w.spread, w.spread);
+      const spreadY = random(-w.spread, w.spread);
+      _shotDir.set(spreadX, spreadY, -1).normalize().applyQuaternion(p.q);
+      this.bullets.push({ id: ++this.serial, owner: p.id, kind, p: p.p.clone().addScaledVector(_shotDir, 3.6), v: _shotDir.multiplyScalar(w.speed).addScaledVector(p.v, 0.35), life: w.life, damage: w.damage });
     }
   }
 
@@ -134,11 +145,11 @@ export class Room {
       const input = p.bot ? this.botInput(p, dt) : this.time - p.lastInput > 0.35 ? { ...emptyInput(), q: p.q.toArray() } : p.input;
       fly(p, input, dt);
       for (const a of this.asteroids) {
-        const delta = p.p.clone().sub(a.p);
-        const distance = delta.length();
+        _delta.copy(p.p).sub(a.p);
+        const distance = _delta.length();
         if (distance >= a.r + SHIP_RADIUS) continue;
-        const normal = distance > 0.001 ? delta.divideScalar(distance) : new Vector3(0, 1, 0);
-        const relative = p.v.clone().sub(a.v).dot(normal);
+        const normal = distance > 0.001 ? _delta.divideScalar(distance) : _normal.set(0, 1, 0);
+        const relative = p.v.x * normal.x + p.v.y * normal.y + p.v.z * normal.z - (a.v.x * normal.x + a.v.y * normal.y + a.v.z * normal.z);
         p.p.copy(a.p).addScaledVector(normal, a.r + SHIP_RADIUS + 0.1);
         if (relative < 0) p.v.addScaledVector(normal, -relative * 1.6);
         if (p.collisionCooldown <= 0) { this.damage(p, Math.max(10, Math.abs(relative) * 1.4), null, 'asteroid'); p.collisionCooldown = 0.65; }
@@ -150,16 +161,16 @@ export class Room {
     const fragments = [];
     for (let i = this.bullets.length - 1; i >= 0; i--) {
       const b = this.bullets[i];
-      const end = b.p.clone().addScaledVector(b.v, dt);
+      _end.copy(b.p).addScaledVector(b.v, dt);
       let nearest = 2, hit = null, rock = false;
       for (const p of this.players.values()) {
         if (!p.alive || !p.connected || p.id === b.owner || p.shield > 0) continue;
-        const t = segmentSphere(b.p, end, p.p, SHIP_RADIUS + 0.45);
+        const t = segmentSphere(b.p, _end, p.p, SHIP_RADIUS + 0.45);
         if (t !== null && t < nearest) { nearest = t; hit = p; rock = false; }
       }
       for (const a of this.asteroids) {
         if (a.hp <= 0) continue;
-        const t = segmentSphere(b.p, end, a.p, a.r);
+        const t = segmentSphere(b.p, _end, a.p, a.r);
         if (t !== null && t < nearest) { nearest = t; hit = a; rock = true; }
       }
       if (hit) {
@@ -167,16 +178,16 @@ export class Room {
           hit.hp -= b.damage;
           if (hit.hp <= 0) {
             this.events.push({ type: 'rock', p: vec(hit.p), r: hit.r });
-            if (hit.r > 5 && this.asteroids.length + fragments.length < 80) for (let n = 0; n < 2; n++) fragments.push(this.rock(hit.r * 0.42, hit.p.clone().add(new Vector3().randomDirection().multiplyScalar(hit.r * 0.7))));
-          } else this.events.push({ type: 'spark', p: vec(b.p.clone().lerp(end, nearest)) });
+            if (hit.r > 5 && this.asteroids.length + fragments.length < 65) for (let n = 0; n < 2; n++) fragments.push(this.rock(hit.r * 0.42, hit.p.clone().add(new Vector3().randomDirection().multiplyScalar(hit.r * 0.7))));
+          } else this.events.push({ type: 'spark', p: vec(b.p.clone().lerp(_end, nearest)) });
         } else this.damage(hit, b.damage, b.owner);
       }
-      b.p.copy(end);
+      b.p.copy(_end);
       b.life -= dt;
       if (hit || b.life <= 0) { this.bullets[i] = this.bullets[this.bullets.length - 1]; this.bullets.pop(); }
     }
     this.asteroids = this.asteroids.filter(a => a.hp > 0).concat(fragments);
-    if (this.asteroids.length < 35 && Math.random() < dt * 0.4) this.asteroids.push(this.rock(random(5, 12), point(250).setLength(240)));
+    if (this.asteroids.length < 25 && Math.random() < dt * 0.4) this.asteroids.push(this.rock(random(5, 12), point(250).setLength(240)));
   }
 
   info() {
@@ -184,6 +195,8 @@ export class Room {
   }
 
   snapshot() {
-    return { type: 'state', time: this.time, phase: this.phase, remaining: this.remaining, players: [...this.players.values()].filter(p => p.connected).map(p => ({ id: p.id, name: p.name, color: p.color, bot: p.bot, p: vec(p.p), v: vec(p.v), q: p.q.toArray().map(n => Math.round(n * 10000) / 10000), hp: round(p.hp), energy: round(p.energy), energyDelay: round(p.energyDelay), boostLocked: p.boostLocked, boosting: p.boosting, alive: p.alive, respawn: round(p.respawn), shield: round(p.shield), kills: p.kills, deaths: p.deaths })), asteroids: this.asteroids.map(a => ({ id: a.id, p: vec(a.p), v: vec(a.v), r: a.r, seed: a.seed })), bullets: this.bullets.map(b => ({ id: b.id, owner: b.owner, kind: b.kind, p: vec(b.p), v: vec(b.v) })), events: this.events.splice(0) };
+    const players = [...this.players.values()].filter(p => p.connected).map(p => ({ id: p.id, name: p.name, color: p.color, bot: p.bot, p: vec(p.p), v: vec(p.v), q: p.q.toArray().map(n => Math.round(n * 10000) / 10000), hp: round(p.hp), energy: round(p.energy), energyDelay: round(p.energyDelay), boostLocked: p.boostLocked, boosting: p.boosting, alive: p.alive, respawn: round(p.respawn), shield: round(p.shield), kills: p.kills, deaths: p.deaths }));
+    const bullets = this.bullets.length > 300 ? this.bullets.slice(-300) : this.bullets;
+    return { type: 'state', time: this.time, phase: this.phase, remaining: this.remaining, players, asteroids: this.asteroids.map(a => ({ id: a.id, p: vec(a.p), v: vec(a.v), r: a.r, seed: a.seed })), bullets: bullets.map(b => ({ id: b.id, owner: b.owner, kind: b.kind, p: vec(b.p), v: vec(b.v) })), events: this.events.splice(0) };
   }
 }

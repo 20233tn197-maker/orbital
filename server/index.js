@@ -127,7 +127,7 @@ export function createGameServer() {
         if (before !== room.phase) announce(room);
       }
       accumulator -= 1 / 30;
-      if (++ticks % 2 === 0) for (const room of rooms.values()) if (room.phase === 'playing') broadcast(room, room.snapshot());
+      if (++ticks % 3 === 0) for (const room of rooms.values()) if (room.phase === 'playing') broadcast(room, room.snapshot());
     }
   }, 8);
   const cleanup = setInterval(() => {
