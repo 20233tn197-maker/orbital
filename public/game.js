@@ -82,7 +82,7 @@ export class SpaceGame {
     const key = new THREE.DirectionalLight('#d0e7ff', 3.4); key.position.set(-30, 45, -15); this.scene.add(key);
     const rim = new THREE.DirectionalLight('#efaa78', 3.6); rim.position.set(20, 7, 20); this.scene.add(rim);
     const blue = new THREE.DirectionalLight('#3b8fa7', 2); blue.position.set(-20, -10, 10); this.scene.add(blue);
-    this.ships = new Map(); this.rocks = new Map(); this.indicators = new Map();
+    this.ships = new Map(); this.rocks = new Map(); this.indicators = new Map(); this.bulletStates = new Map(); this.predicted = [];
     this.active = false; this.engaged = false; this.firstPerson = false;
     this.keys = new Set(); this.mouse = { left: false, right: false };
     this.aim = new THREE.Quaternion();
@@ -245,7 +245,7 @@ export class SpaceGame {
     for (const o of this.rocks.values()) this.scene.remove(o.mesh);
     this.rocks.clear();
     for (const o of this.indicators.values()) o.remove();
-    this.indicators.clear(); this.bulletMesh.count = 0; this.particleLife.fill(0); this.particleSize.fill(0);
+    this.indicators.clear(); this.bulletStates.clear(); this.predicted.length = 0; this.bulletMesh.count = 0; this.particleLife.fill(0); this.particleSize.fill(0);
     this.snapshot = null; this.local = null;
   }
 
@@ -294,6 +294,16 @@ export class SpaceGame {
       this.rocks.get(a.id).state = a;
     }
     for (const [id, o] of this.rocks) if (!rockIds.has(id)) { this.scene.remove(o.mesh); this.rocks.delete(id); }
+    const bulletIds = new Set();
+    for (const b of state.bullets) {
+      bulletIds.add(b.id);
+      let o = this.bulletStates.get(b.id);
+      if (!o) {
+        o = { p: new THREE.Vector3().fromArray(b.p), v: new THREE.Vector3().fromArray(b.v), kind: b.kind, owner: b.owner };
+        this.bulletStates.set(b.id, o);
+      } else { o.v.fromArray(b.v); o.kind = b.kind; }
+    }
+    for (const id of this.bulletStates.keys()) if (!bulletIds.has(id)) this.bulletStates.delete(id);
     for (const e of state.events) this.event(e);
   }
 
@@ -329,6 +339,15 @@ export class SpaceGame {
     return { ...emptyInput(), q: this.aim.toArray() };
   }
 
+  predictShot(kind) {
+    const w = WEAPONS[kind];
+    for (let i = 0; i < w.pellets; i++) {
+      const dir = new THREE.Vector3((Math.random() * 2 - 1) * w.spread, (Math.random() * 2 - 1) * w.spread, -1).normalize().applyQuaternion(this.aim);
+      this.predicted.push({ p: this.local.p.clone().addScaledVector(dir, 3.6), v: dir.multiplyScalar(w.speed).addScaledVector(this.local.v, 0.35), kind, life: w.life });
+    }
+    if (this.predicted.length > 350) this.predicted.splice(0, this.predicted.length - 350);
+  }
+
   updatePlaying(dt, now) {
     if (!this.local || !this.snapshot) return;
     const input = this.input(dt);
@@ -336,10 +355,10 @@ export class SpaceGame {
     if (now - this.sendAt > 32) { this.hooks.send({ type: 'input', input }); this.sendAt = now; }
     this.machineCooldown = Math.max(0, this.machineCooldown - dt); this.cannonCooldown = Math.max(0, this.cannonCooldown - dt);
     if (this.local.alive) {
-      if (input.fire && !this.machineCooldown) { this.audio.shot('machine'); this.machineCooldown = WEAPONS.machine.interval; this.muzzleLight.intensity = 6; this.shake = Math.max(this.shake, 0.025); }
-      if (input.cannon && !this.cannonCooldown) { this.audio.shot('cannon'); this.cannonCooldown = WEAPONS.cannon.interval; this.muzzleLight.intensity = 18; this.shake = Math.max(this.shake, 0.16); }
+      if (input.fire && !this.machineCooldown) { this.audio.shot('machine'); this.machineCooldown = WEAPONS.machine.interval; this.muzzleLight.intensity = 6; this.shake = Math.max(this.shake, 0.025); this.predictShot('machine'); }
+      if (input.cannon && !this.cannonCooldown) { this.audio.shot('cannon'); this.cannonCooldown = WEAPONS.cannon.interval; this.muzzleLight.intensity = 18; this.shake = Math.max(this.shake, 0.16); this.predictShot('cannon'); }
     }
-    const alpha = 1 - Math.exp(-14 * dt), age = Math.min(0.13, (now - this.lastSnapshotAt) / 1000);
+    const alpha = 1 - Math.exp(-14 * dt), age = Math.min(0.3, (now - this.lastSnapshotAt) / 1000);
     for (const [id, o] of this.ships) {
       const self = id === this.id;
       o.mesh.visible = o.state.alive && !(self && this.firstPerson);
@@ -356,12 +375,27 @@ export class SpaceGame {
       const t = this.snapshot.time + age;
       o.mesh.rotation.set(o.state.seed + t * 0.025, o.state.seed * 0.3 + t * 0.018, t * 0.01);
     }
-    this.bulletMesh.count = Math.min(this.snapshot.bullets.length, 350);
-    this.snapshot.bullets.slice(0, 350).forEach((b, i) => {
-      dummy.position.fromArray(b.p).addScaledVector(v.fromArray(b.v), age);
-      dummy.quaternion.setFromUnitVectors(Z, v.normalize()); dummy.scale.setScalar(b.kind === 'cannon' ? 1.4 : 1);
-      dummy.updateMatrix(); this.bulletMesh.setMatrixAt(i, dummy.matrix); this.bulletMesh.setColorAt(i, b.kind === 'cannon' ? this.cannonColor : this.machineColor);
-    });
+    let bulletCount = 0;
+    for (let i = this.predicted.length - 1; i >= 0; i--) {
+      const o = this.predicted[i];
+      o.p.addScaledVector(o.v, dt); o.life -= dt;
+      if (o.life <= 0) { this.predicted.splice(i, 1); continue; }
+      if (bulletCount >= 350) continue;
+      dummy.position.copy(o.p);
+      dummy.quaternion.setFromUnitVectors(Z, v.copy(o.v).normalize()); dummy.scale.setScalar(o.kind === 'cannon' ? 1.4 : 1);
+      dummy.updateMatrix(); this.bulletMesh.setMatrixAt(bulletCount, dummy.matrix); this.bulletMesh.setColorAt(bulletCount, o.kind === 'cannon' ? this.cannonColor : this.machineColor);
+      bulletCount++;
+    }
+    for (const o of this.bulletStates.values()) {
+      if (o.owner === this.id) continue;
+      if (bulletCount >= 350) break;
+      o.p.addScaledVector(o.v, dt);
+      dummy.position.copy(o.p);
+      dummy.quaternion.setFromUnitVectors(Z, v.copy(o.v).normalize()); dummy.scale.setScalar(o.kind === 'cannon' ? 1.4 : 1);
+      dummy.updateMatrix(); this.bulletMesh.setMatrixAt(bulletCount, dummy.matrix); this.bulletMesh.setColorAt(bulletCount, o.kind === 'cannon' ? this.cannonColor : this.machineColor);
+      bulletCount++;
+    }
+    this.bulletMesh.count = bulletCount;
     this.bulletMesh.instanceMatrix.needsUpdate = true; if (this.bulletMesh.instanceColor) this.bulletMesh.instanceColor.needsUpdate = true;
     const offset = this.firstPerson ? v.set(0, 0.48, -1.45) : v.set(0, 2.5, this.local.boosting ? 12.5 : 10.5);
     offset.applyQuaternion(this.local.q).add(this.local.p);

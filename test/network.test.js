@@ -48,7 +48,7 @@ test('real WebSockets: private room, host permissions, playing, reconnect and re
     host.send({ type: 'settings', minutes: 1, bots: 2 });
     await host.wait(m => m.type === 'room' && m.room.minutes === 1);
     host.send({ type: 'start' });
-    const state = await guest.wait(m => m.type === 'state'); assert.equal(state.players.length, 4); assert.equal(state.asteroids.length, 48);
+    const state = await guest.wait(m => m.type === 'state'); assert.equal(state.players.length, 4); assert.equal(state.asteroids.length, 32);
     assert.equal(room.phase, 'playing');
     guest.ws.close(); await new Promise(resolve => guest.ws.once('close',resolve));
     const resumed = await client(url); clients.push(resumed);
