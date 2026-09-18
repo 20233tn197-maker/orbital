@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#080d12">
+  <meta name="description" content="Orbital Arena. Combate espacial 3D, naves, asteroides y salas privadas. Entra, despega y domina el vacío.">
+  <title>ORBITAL — Arena espacial</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+  <script type="importmap">{"imports":{"three":"/vendor/three/three.module.js"}}</script>
+  <script src="/vendor/gsap/gsap.min.js" defer></script>
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <canvas id="universe" aria-label="Escenario espacial 3D"></canvas>
+  <div class="grain" aria-hidden="true"></div>
+  <div id="vignette" aria-hidden="true"></div>
+
+  <main id="menu" class="screen">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Orbital inicio"><span class="brand-icon">◈</span><span>ORBITAL<small>SPACE COMBAT ARENA</small></span></a>
+      <div class="header-right"><span class="server-status"><i id="status-dot"></i><span id="connection-label">CONECTANDO</span></span><button class="icon-button" id="settings-open" title="Configuración" aria-label="Abrir configuración">⚙</button></div>
+    </header>
+    <section class="hero">
+      <div class="eyebrow"><span class="tiny-line"></span> SECTOR 07 <span class="muted">/</span> SIN JURISDICCIÓN</div>
+      <h1>EL VACÍO<br>NO <em>PERDONA.</em></h1>
+      <p>No hay arriba. No hay abajo.<br>Solo tu nave y el próximo objetivo.</p>
+      <div class="hero-tags"><span><i></i> COMBATE 360°</span><span>HASTA 8 PILOTOS</span><span>EN TU NAVEGADOR</span></div>
+    </section>
+    <div class="ship-label" aria-hidden="true"><div class="label-cross">+</div><div><span>INTERCEPTOR CLASE V</span><strong>WRAITH <b>01</b></strong><small>DOBLE ARMAMENTO · PROPULSIÓN IÓNICA</small></div></div>
+    <section class="operations">
+      <div class="section-label"><span>01 <b>ELIGE TU MISIÓN</b></span><label class="pilot-name">IDENTIFICACIÓN <input id="pilot-name" maxlength="18" placeholder="Tu nombre de piloto" autocomplete="nickname" aria-label="Nombre de piloto"></label></div>
+      <div class="mode-grid">
+        <button id="solo-button" class="mode-card"><span class="card-top"><span class="mode-icon">◎</span><span class="card-number">01 / ENTRENAMIENTO</span><span class="card-arrow">↗</span></span><strong>Vuelo solitario</strong><p>Perfecciona tu instinto. Enfréntate a la IA.</p><span class="card-bottom">TÚ CONTRA EL SECTOR <span>DESPEGAR →</span></span></button>
+        <button id="create-button" class="mode-card featured"><span class="card-top"><span class="mode-icon">⌘</span><span class="card-number">02 / MULTIJUGADOR</span><span class="card-arrow">↗</span></span><strong>Crear sala privada</strong><p>Tu escuadrón. Tus reglas. Una sola corona.</p><span class="card-bottom">INVITA CON UN CÓDIGO <span>CREAR SALA →</span></span></button>
+        <button id="join-open" class="mode-card"><span class="card-top"><span class="mode-icon">⌁</span><span class="card-number">03 / REFUERZOS</span><span class="card-arrow">↗</span></span><strong>Unirse a una sala</strong><p>Introduce el código. Entra en combate.</p><span class="card-bottom">ACCESO PRIVADO <span>CONECTAR →</span></span></button>
+      </div>
+    </section>
+    <footer class="menu-footer"><span><i class="live-dot"></i> SISTEMAS OPERATIVOS <b>v1.0</b></span><button id="controls-open">GUÍA DE VUELO <span>↗</span></button><span class="footer-coords">X 048.72 <span>/</span> Y 109.36 <span>/</span> Z −027.01</span></footer>
+  </main>
+
+  <section id="lobby" class="screen overlay-screen hidden">
+    <div class="panel lobby-panel">
+      <div class="panel-top"><span class="eyebrow">ENLACE ESTABLECIDO</span><button id="leave-lobby" class="text-button">SALIR ↗</button></div>
+      <h2 id="lobby-title">Tu escuadrón.</h2><p class="subtle" id="lobby-subtitle">Comparte el código. El vacío os espera.</p>
+      <button id="copy-code" class="room-code" title="Copiar enlace de invitación"><span>CÓDIGO DE ACCESO</span><strong id="room-code">00000</strong><small id="copy-hint">COPIAR INVITACIÓN ↗</small></button>
+      <div class="list-heading"><span>PILOTOS CONECTADOS</span><span id="player-count">1 / 8</span></div>
+      <div id="lobby-players" class="lobby-players"></div>
+      <div class="match-settings"><label>DURACIÓN<select id="match-minutes"><option value="1">1 minuto</option><option value="3">3 minutos</option><option value="5" selected>5 minutos</option><option value="10">10 minutos</option><option value="15">15 minutos</option><option value="20">20 minutos</option><option value="30">30 minutos</option></select></label><label>PILOTOS IA<select id="match-bots"><option value="0">Sin bots</option><option value="1">1 bot</option><option value="2">2 bots</option><option value="3">3 bots</option><option value="4">4 bots</option><option value="5">5 bots</option><option value="6">6 bots</option></select></label></div>
+      <button id="start-button" class="primary-button">INICIAR COMBATE <span>→</span></button><p class="panel-note" id="host-note">Eres el anfitrión. Inicia cuando estéis listos.</p>
+    </div>
+  </section>
+
+  <section id="hud" class="hidden" aria-label="Interfaz de combate">
+    <div class="hud-top"><div class="hud-brand">◈ <b>ORBITAL</b><span id="hud-room">SECTOR 07</span></div><div class="clock"><span>TIEMPO RESTANTE</span><strong id="timer">05:00</strong></div><div class="score"><span>TUS BAJAS</span><strong id="kills">00</strong><small id="position-label">1.º / 5</small></div></div>
+    <div class="boost-panel"><span class="vertical-label">PROPULSIÓN / R</span><div class="boost-track"><div id="boost-fill"></div><i></i><i></i><i></i></div><b id="boost-number">100</b></div>
+    <div id="crosshair"><span></span><span></span><span></span><span></span><i></i><div id="hit-marker">×</div></div>
+    <div id="target-label"></div>
+    <div id="enemy-indicators"></div>
+    <div id="kill-feed" class="kill-feed"></div>
+    <div id="kill-banner" class="kill-banner hidden"><span>OBJETIVO ELIMINADO</span><strong>+1 BAJA</strong></div>
+    <div id="boundary-warning" class="boundary-warning hidden">△ LÍMITE DEL SECTOR · CAMBIA DE RUMBO</div>
+    <div class="hud-bottom"><div class="health-panel"><div><span>INTEGRIDAD DE LA NAVE</span><strong><b id="health-number">100</b><small> / 100</small></strong></div><div class="health-track"><div id="health-fill"></div></div><p id="shield-label">WRAITH 01 · SISTEMAS NOMINALES</p></div><div class="flight-info"><strong id="speed">0</strong><span>M/S</span><small id="camera-label">TERCERA PERSONA <b>[C]</b></small></div><div class="weapons"><div><span class="weapon-symbol">≋</span><span>METRALLETA<small>CLIC IZQUIERDO</small></span><b>∞</b></div><div id="cannon-slot"><span class="weapon-symbol">⋙</span><span>CAÑÓN DE DISPERSIÓN<small>CLIC DERECHO</small></span><b id="cannon-status">LISTO</b></div></div></div>
+    <div class="hud-help"><span>WASD MOVER</span><span>Q/E ROTAR</span><span>R TURBO</span><span>TAB MARCADOR</span><span>ESC PAUSA</span><b id="network-stats">— MS · — FPS</b></div>
+    <div id="damage-flash"></div>
+  </section>
+
+  <section id="flight-gate" class="center-overlay hidden"><div class="mini-panel"><span class="eyebrow">TODOS LOS SISTEMAS LISTOS</span><h2>Tu nave te espera.</h2><p>Captura el mouse y toma el control.</p><button id="engage-button" class="primary-button">ENTRAR EN CABINA →</button><small>WASD · MOUSE PARA APUNTAR · R TURBO</small></div></section>
+  <section id="pause" class="center-overlay hidden"><div class="mini-panel"><span class="eyebrow">PILOTO EN ESPERA</span><h2>Recupera el control.</h2><p>La partida sigue en tiempo real.</p><button id="resume-button" class="primary-button">VOLVER AL COMBATE →</button><button id="pause-settings" class="secondary-button">CONFIGURACIÓN</button><button id="leave-game" class="text-button">ABANDONAR PARTIDA</button></div></section>
+  <section id="death" class="center-overlay hidden"><div class="death-panel"><span class="eyebrow">SEÑAL PERDIDA</span><h2>Nave destruida.</h2><p>Preparando un nuevo interceptor</p><strong id="respawn-count">3</strong><small>REAPARICIÓN AUTOMÁTICA</small></div></section>
+  <section id="scoreboard" class="center-overlay hidden"><div class="panel scoreboard-panel"><span class="eyebrow">CLASIFICACIÓN EN DIRECTO</span><h2>Control del sector.</h2><div id="live-ranking"></div><p class="panel-note">Mantén TAB para ver el marcador</p></div></section>
+  <section id="results" class="screen overlay-screen hidden"><div class="panel results-panel"><span class="eyebrow">TRANSMISIÓN FINAL / PARTIDA TERMINADA</span><h2 id="winner-title">Sector conquistado.</h2><p class="subtle" id="winner-subtitle"></p><div id="final-ranking"></div><div class="results-actions"><button id="rematch-button" class="primary-button">OTRA PARTIDA <span>↗</span></button><button id="back-lobby" class="secondary-button">AJUSTAR PARTIDA</button><button id="leave-results" class="text-button">VOLVER AL INICIO</button></div><p class="panel-note" id="rematch-note">Tu escuadrón sigue aquí. ¿Otra ronda?</p></div></section>
+
+  <dialog id="join-dialog"><form id="join-form" class="dialog-inner"><div class="panel-top"><span class="eyebrow">ACCESO PRIVADO</span><button type="button" class="close-dialog icon-button" aria-label="Cerrar">×</button></div><h2>Encuentra tu sala.</h2><p>Introduce el código de 5 dígitos del anfitrión.</p><input id="join-code" class="code-input" inputmode="numeric" pattern="[0-9]{5}" maxlength="5" minlength="5" placeholder="00000" required aria-label="Código de sala"><button class="primary-button" type="submit">CONECTAR <span>→</span></button></form></dialog>
+  <dialog id="settings-dialog"><div class="dialog-inner"><div class="panel-top"><span class="eyebrow">AJUSTES DEL SISTEMA</span><button class="close-dialog icon-button" aria-label="Cerrar">×</button></div><h2>A tu medida.</h2><label class="setting-row">Calidad gráfica<select id="quality"><option value="low">Rendimiento</option><option value="medium">Equilibrada</option><option value="high">Alta</option></select></label><label class="setting-row">Sensibilidad del mouse<input id="sensitivity" type="range" min="0.3" max="2" step="0.1" value="1"></label><label class="setting-row">Volumen<input id="volume" type="range" min="0" max="1" step="0.05" value="0.45"></label><label class="setting-row">Invertir eje vertical<input id="invert" type="checkbox"></label><p class="panel-note">Los ajustes se guardan en este navegador.</p></div></dialog>
+  <dialog id="controls-dialog"><div class="dialog-inner"><div class="panel-top"><span class="eyebrow">MANUAL DEL INTERCEPTOR</span><button class="close-dialog icon-button" aria-label="Cerrar">×</button></div><h2>Domina el vacío.</h2><div class="controls-list"><span><kbd>W A S D</kbd> Avanzar, retroceder y desplazarte</span><span><kbd>MOUSE</kbd> Orientación libre de 360°</span><span><kbd>Q / E</kbd> Rotar sobre tu propio eje</span><span><kbd>ESPACIO / SHIFT</kbd> Ascender / descender</span><span><kbd>R + W</kbd> Turbo (consume energía)</span><span><kbd>CLIC IZQ.</kbd> Metralleta automática</span><span><kbd>CLIC DER.</kbd> Cañón tipo escopeta</span><span><kbd>C</kbd> Primera / tercera persona</span><span><kbd>TAB</kbd> Clasificación</span><span><kbd>ESC</kbd> Liberar mouse / menú</span></div><p class="panel-note">Gana quien consiga más bajas. En empate: menos muertes. Al reaparecer tienes 2,5 s de escudo; disparar lo desactiva.</p></div></dialog>
+  <div id="toast" role="status" class="toast hidden"></div>
+  <div id="reconnecting" class="connection-banner hidden">Restableciendo enlace con el servidor…</div>
+  <div id="webgl-error" class="center-overlay hidden"><div class="panel"><h2>Necesitamos WebGL 2.</h2><p>Activa la aceleración por hardware y abre el juego en un navegador actualizado.</p></div></div>
+  <div class="mobile-notice">Diseñado para ordenador · teclado y mouse</div>
+</body>
+</html>

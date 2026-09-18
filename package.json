@@ -1,0 +1,21 @@
+{
+  "name": "orbital-arena",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Combate espacial 3D con salas privadas y servidor autoritativo",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node --test test/*.test.js",
+    "check": "node --check server/index.js && node --check server/game.js && node --check public/game.js && node --check public/app.js && node --check shared/flight.js"
+  },
+  "engines": { "node": ">=22" },
+  "dependencies": {
+    "express": "^5.1.0",
+    "gsap": "^3.13.0",
+    "three": "^0.180.0",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": { "@playwright/test": "^1.55.0" }
+}
