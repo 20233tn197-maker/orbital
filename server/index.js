@@ -84,6 +84,7 @@ export function createGameServer() {
         p.ws = ws;
         ws.room = target;
         ws.playerId = p.id;
+        target.sentBullets = new Set();
         send(ws, { type: 'welcome', id: p.id, token: p.token, room: target.info() });
         announce(target);
       } else if (data.type === 'resume') {
@@ -97,6 +98,7 @@ export function createGameServer() {
         ws.room = target;
         ws.playerId = p.id;
         if (!target.host) target.host = p.id;
+        target.sentBullets = new Set();
         send(ws, { type: 'welcome', id: p.id, token: p.token, room: target.info(), resumed: true });
         announce(target);
       } else if (data.type === 'leave') {
@@ -127,7 +129,7 @@ export function createGameServer() {
         if (before !== room.phase) announce(room);
       }
       accumulator -= 1 / 30;
-      if (++ticks % 3 === 0) for (const room of rooms.values()) if (room.phase === 'playing') broadcast(room, room.snapshot());
+      if (++ticks % 2 === 0) for (const room of rooms.values()) if (room.phase === 'playing') broadcast(room, room.snapshot());
     }
   }, 8);
   const cleanup = setInterval(() => {

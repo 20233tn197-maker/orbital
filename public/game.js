@@ -6,6 +6,8 @@ const $ = id => document.getElementById(id);
 const v = new THREE.Vector3();
 const v2 = new THREE.Vector3();
 const q = new THREE.Quaternion();
+const dq = new THREE.Quaternion();
+const euler = new THREE.Euler();
 const X = new THREE.Vector3(1, 0, 0), Y = new THREE.Vector3(0, 1, 0), Z = new THREE.Vector3(0, 0, 1);
 const dummy = new THREE.Object3D();
 const clamp = THREE.MathUtils.clamp;
@@ -294,16 +296,15 @@ export class SpaceGame {
       this.rocks.get(a.id).state = a;
     }
     for (const [id, o] of this.rocks) if (!rockIds.has(id)) { this.scene.remove(o.mesh); this.rocks.delete(id); }
-    const bulletIds = new Set();
     for (const b of state.bullets) {
-      bulletIds.add(b.id);
+      if (b.owner === this.id) continue;
       let o = this.bulletStates.get(b.id);
       if (!o) {
         o = { p: new THREE.Vector3().fromArray(b.p), v: new THREE.Vector3().fromArray(b.v), kind: b.kind, owner: b.owner };
         this.bulletStates.set(b.id, o);
       } else { o.v.fromArray(b.v); o.kind = b.kind; }
     }
-    for (const id of this.bulletStates.keys()) if (!bulletIds.has(id)) this.bulletStates.delete(id);
+    if (state.bulletsRemoved) for (const id of state.bulletsRemoved) this.bulletStates.delete(id);
     for (const e of state.events) this.event(e);
   }
 
@@ -348,6 +349,25 @@ export class SpaceGame {
     if (this.predicted.length > 350) this.predicted.splice(0, this.predicted.length - 350);
   }
 
+  tiltShip(o, base, dt) {
+    if (dt <= 0) return;
+    if (!o.prevQ) { o.prevQ = base.clone(); o.tiltRoll = 0; o.tiltPitch = 0; return; }
+    dq.copy(o.prevQ).invert().multiply(base);
+    o.prevQ.copy(base);
+    if (dq.w < 0) { dq.x = -dq.x; dq.y = -dq.y; dq.z = -dq.z; dq.w = -dq.w; }
+    const angle = 2 * Math.acos(clamp(dq.w, -1, 1));
+    const s = Math.sqrt(Math.max(0, 1 - dq.w * dq.w));
+    let ax = 0, ay = 0;
+    if (s > 1e-4) { ax = dq.x / s; ay = dq.y / s; }
+    const rate = angle / dt;
+    const targetRoll = clamp(ay * rate * 0.06, -0.55, 0.55);
+    const targetPitch = clamp(ax * rate * 0.035, -0.4, 0.4);
+    const k = 1 - Math.exp(-11 * dt);
+    o.tiltRoll += (targetRoll - o.tiltRoll) * k;
+    o.tiltPitch += (targetPitch - o.tiltPitch) * k;
+    o.mesh.quaternion.multiply(dq.setFromEuler(euler.set(o.tiltPitch, 0, o.tiltRoll, 'XYZ')));
+  }
+
   updatePlaying(dt, now) {
     if (!this.local || !this.snapshot) return;
     const input = this.input(dt);
@@ -362,10 +382,11 @@ export class SpaceGame {
     for (const [id, o] of this.ships) {
       const self = id === this.id;
       o.mesh.visible = o.state.alive && !(self && this.firstPerson);
-      if (self) { o.mesh.position.copy(this.local.p); o.mesh.quaternion.copy(this.local.q); }
+      if (self) { o.mesh.position.copy(this.local.p); o.mesh.quaternion.copy(this.local.q); this.tiltShip(o, this.local.q, dt); }
       else {
         v.copy(o.targetP).addScaledVector(v2.fromArray(o.state.v), age);
         o.mesh.position.lerp(v, alpha); o.mesh.quaternion.slerp(o.targetQ, alpha);
+        this.tiltShip(o, o.mesh.quaternion, dt);
       }
       o.mesh.userData.shield.visible = o.state.shield > 0;
       for (const flame of o.mesh.userData.flames) { flame.scale.y = (o.state.boosting ? 2.6 : 0.8) * (0.9 + Math.random() * 0.2); flame.material.opacity = o.state.boosting ? 0.9 : 0.5; }

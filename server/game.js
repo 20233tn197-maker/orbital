@@ -27,6 +27,7 @@ export class Room {
     this.remaining = 0;
     this.asteroids = [];
     this.bullets = [];
+    this.sentBullets = new Set();
     this.events = [];
     this.time = 0;
     this.serial = 0;
@@ -68,6 +69,7 @@ export class Room {
     for (let i = 0; i < botsToAdd; i++) this.addPlayer(['VÉRTICE', 'NOVA', 'ECHO', 'SPECTRE', 'ORION', 'PULSAR'][i], true);
     this.asteroids = Array.from({ length: 32 }, (_, i) => this.rock(i < 8 ? random(10, 15) : i < 20 ? random(5, 8) : random(2.5, 4)));
     this.bullets = [];
+    this.sentBullets = new Set();
     this.events = [];
     this.phase = 'playing';
     this.remaining = this.minutes * 60;
@@ -196,7 +198,15 @@ export class Room {
 
   snapshot() {
     const players = [...this.players.values()].filter(p => p.connected).map(p => ({ id: p.id, name: p.name, color: p.color, bot: p.bot, p: vec(p.p), v: vec(p.v), q: p.q.toArray().map(n => Math.round(n * 10000) / 10000), hp: round(p.hp), energy: round(p.energy), energyDelay: round(p.energyDelay), boostLocked: p.boostLocked, boosting: p.boosting, alive: p.alive, respawn: round(p.respawn), shield: round(p.shield), kills: p.kills, deaths: p.deaths }));
-    const bullets = this.bullets.length > 300 ? this.bullets.slice(-300) : this.bullets;
-    return { type: 'state', time: this.time, phase: this.phase, remaining: this.remaining, players, asteroids: this.asteroids.map(a => ({ id: a.id, p: vec(a.p), v: vec(a.v), r: a.r, seed: a.seed })), bullets: bullets.map(b => ({ id: b.id, owner: b.owner, kind: b.kind, p: vec(b.p), v: vec(b.v) })), events: this.events.splice(0) };
+    const current = new Set();
+    const bullets = [];
+    for (const b of this.bullets) {
+      current.add(b.id);
+      if (!this.sentBullets.has(b.id)) bullets.push({ id: b.id, owner: b.owner, kind: b.kind, p: vec(b.p), v: vec(b.v) });
+    }
+    const bulletsRemoved = [];
+    for (const id of this.sentBullets) if (!current.has(id)) bulletsRemoved.push(id);
+    this.sentBullets = current;
+    return { type: 'state', time: this.time, phase: this.phase, remaining: this.remaining, players, asteroids: this.asteroids.map(a => ({ id: a.id, p: vec(a.p), v: vec(a.v), r: a.r, seed: a.seed })), bullets, bulletsRemoved, events: this.events.splice(0) };
   }
 }
